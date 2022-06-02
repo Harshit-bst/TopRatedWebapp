@@ -1,3 +1,8 @@
+import datetime
+import json
+
+from google.appengine.ext import db
+
 from bs4 import BeautifulSoup
 
 from top_rated_app.models import AndroidApp
@@ -18,6 +23,8 @@ def add_apps_to_db(apps_data, category):
         android_app_obj.corporation = corporation
         android_app_obj.pkg = pkg
         android_app_obj.category = category
+        android_app_obj.updated_on = datetime.datetime.now()
+        android_app_obj.disabled = False
         android_app_obj.put()
 
 
@@ -61,29 +68,38 @@ def get_app_detail_json_formatted_data(data):
 def get_app_details(request, *args, **kwargs):
     id = dict(request.str_params).get("id")
     response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id))
-    soup = BeautifulSoup(response.content)
+    soup = BeautifulSoup(response.content, "html.parser")
     response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
     response_data = get_app_detail_json_formatted_data(response_data)
-    request.response.out.write({"data": response_data})
+    request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
 
 
 def save_new_apps(request):  # put application's code here
     response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/top")
-    soup = BeautifulSoup(response.content)
+    soup = BeautifulSoup(response.content, "html.parser")
     top_free_apps, top_paid_apps, top_grossing_apps, top_free_games, top_paid_games, top_grossing_games = list(soup.findAll("div", attrs={"class": ['ZmHEEd', 'fLyRuc']}))
+    all_apps = db.GqlQuery("SELECT * "
+                           "FROM AndroidApp "
+                           "WHERE disabled = FALSE ")
+    for app in all_apps:
+        app.disabled = True
+        app.put()
     add_apps_to_db(top_free_apps.children, "top_free_apps")
     add_apps_to_db(top_paid_apps.children, "top_paid_apps")
     add_apps_to_db(top_grossing_apps.children, "top_grossing_apps")
     add_apps_to_db(top_free_games.children, "top_free_games")
     add_apps_to_db(top_paid_games.children, "top_paid_games")
     add_apps_to_db(top_grossing_games.children, "top_grossing_games")
-    request.response.out.write({"success": True})
+    request.response.out.write(json.dumps({"success": True}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
 
 
 def get_all_apps(request):
-    all_apps = AndroidApp.all()
+    all_apps = db.GqlQuery("SELECT * "
+                            "FROM AndroidApp "
+                            "WHERE disabled = FALSE "
+                            "ORDER BY updated_on DESC LIMIT 60")
     response_data = {}
     for app in all_apps:
         data = {
@@ -97,5 +113,5 @@ def get_all_apps(request):
             response_data[category].append(data)
         else:
             response_data[category] = [data]
-    request.response.out.write({"data": response_data})
+    request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')

@@ -8,4 +8,5 @@ class AndroidApp(db.Model):
     image_url = db.StringProperty()
     details = db.StringProperty()
     category = db.StringProperty()
-    created_on = db.DateTimeProperty(auto_now=True)
+    updated_on = db.DateTimeProperty(auto_now=True)
+    disabled = db.BooleanProperty(default=False)

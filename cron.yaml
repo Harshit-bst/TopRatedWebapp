@@ -1,0 +1,4 @@
+cron:
+- description: "latest apps and games"
+  url: /api/v1/save-new-apps
+  schedule: every 6 hours

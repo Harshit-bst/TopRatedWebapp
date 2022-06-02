@@ -13,6 +13,6 @@ indexes:
 
 - kind: AndroidApp
   properties:
-  - name: pkg
-  - name: date
+  - name: disabled
+  - name: updated_on
     direction: desc
