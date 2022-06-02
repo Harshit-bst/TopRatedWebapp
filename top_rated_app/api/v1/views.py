@@ -68,9 +68,12 @@ def get_app_detail_json_formatted_data(data):
 def get_app_details(request, *args, **kwargs):
     id = dict(request.str_params).get("id")
     response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id))
-    soup = BeautifulSoup(response.content, "html.parser")
-    response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
-    response_data = get_app_detail_json_formatted_data(response_data)
+    try:
+        soup = BeautifulSoup(response.content, "html.parser")
+        response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
+        response_data = get_app_detail_json_formatted_data(response_data)
+    except Exception as e:
+        response_data = {"error": "Unable to get details for package "+ str(id)}
     request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
 
