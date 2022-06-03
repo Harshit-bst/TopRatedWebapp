@@ -6,7 +6,8 @@ from google.appengine.ext import db
 from bs4 import BeautifulSoup
 
 from top_rated_app.models import AndroidApp
-from google.appengine.api import urlfetch
+from google.appengine.api import urlfetch, memcache
+
 
 def add_apps_to_db(apps_data, category):
     for app in apps_data:
@@ -67,13 +68,16 @@ def get_app_detail_json_formatted_data(data):
 
 def get_app_details(request, *args, **kwargs):
     id = dict(request.str_params).get("id")
-    response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id))
-    try:
-        soup = BeautifulSoup(response.content, "html.parser")
-        response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
-        response_data = get_app_detail_json_formatted_data(response_data)
-    except Exception as e:
-        response_data = {"error": "Unable to get details for package "+ str(id)}
+    response_data = memcache.get("details_" + id)
+    if not response_data:
+        response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id))
+        try:
+            soup = BeautifulSoup(response.content, "html.parser")
+            response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
+            response_data = get_app_detail_json_formatted_data(response_data)
+        except Exception as e:
+            response_data = {"error": "Unable to get details for package "+ str(id)}
+        memcache.set("details_" + id, response_data, 21600)
     request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
 
@@ -99,25 +103,30 @@ def save_new_apps(request):  # put application's code here
     add_apps_to_db(top_grossing_games.children, "top_grossing_games")
     request.response.out.write(json.dumps({"success": True}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
+    # reset memcache
+    memcache.delete("latest_60_apps")
 
 
 def get_all_apps(request):
-    all_apps = db.GqlQuery("SELECT * "
-                            "FROM AndroidApp "
-                            "WHERE disabled = FALSE "
-                            "ORDER BY updated_on DESC LIMIT 60")
-    response_data = {}
-    for app in all_apps:
-        data = {
-            "icon_url": app.image_url,
-            "name": app.name,
-            "corporation": app.corporation,
-            "pkg": app.pkg
-        }
-        category = app.category
-        if response_data.get(category):
-            response_data[category].append(data)
-        else:
-            response_data[category] = [data]
+    response_data = memcache.get("latest_60_apps")
+    if not response_data:
+        all_apps = db.GqlQuery("SELECT * "
+                                "FROM AndroidApp "
+                                "WHERE disabled = FALSE "
+                                "ORDER BY updated_on DESC LIMIT 60")
+        response_data = {}
+        for app in all_apps:
+            data = {
+                "icon_url": app.image_url,
+                "name": app.name,
+                "corporation": app.corporation,
+                "pkg": app.pkg
+            }
+            category = app.category
+            if response_data.get(category):
+                response_data[category].append(data)
+            else:
+                response_data[category] = [data]
+        memcache.set("latest_60_apps", response_data, 21600)
     request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
