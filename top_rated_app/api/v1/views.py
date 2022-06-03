@@ -79,7 +79,10 @@ def get_app_details(request, *args, **kwargs):
 
 
 def save_new_apps(request):  # put application's code here
-    response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/top")
+    # https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/top
+    # https://web.archive.org/web/20220409232016/https://play.google.com/store/apps/top
+    # https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top
+    response = urlfetch.fetch("https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top")
     soup = BeautifulSoup(response.content, "html.parser")
     top_free_apps, top_paid_apps, top_grossing_apps, top_free_games, top_paid_games, top_grossing_games = list(soup.findAll("div", attrs={"class": ['ZmHEEd', 'fLyRuc']}))
     all_apps = db.GqlQuery("SELECT * "

@@ -2,3 +2,4 @@ cron:
 - description: "latest apps and games"
   url: /api/v1/task-queue-save-new-apps
   schedule: every 6 hours
+  target: harshit-dev
