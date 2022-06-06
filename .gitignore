@@ -3,3 +3,4 @@ venv
 .idea
 .vscode
 application_default_credentials.json
+test.py

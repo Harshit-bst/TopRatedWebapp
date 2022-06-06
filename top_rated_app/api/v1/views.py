@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 
 from google.appengine.ext import db
 
@@ -11,22 +12,25 @@ from google.appengine.api import urlfetch, memcache
 
 def add_apps_to_db(apps_data, category):
     for app in apps_data:
-        image = app.find("img", attrs={"class": ["T75of", "QNCnCf"]}).attrs['data-src']
-        name = app.find("div", attrs={"class": ["WsMG1c", "nnK0zc"]}).text
-        pkg = app.find("div", attrs={"class": ["WsMG1c", "nnK0zc"]}).parent.attrs["href"].split("id=")[-1]
-        corporation = app.find("div", attrs={"class": ["KoLSrc"]}).text
+        try:
+            image = app.find("img", attrs={"class": ["T75of", "QNCnCf"]}).attrs['data-src']
+            name = app.find("div", attrs={"class": ["WsMG1c", "nnK0zc"]}).text
+            pkg = app.find("div", attrs={"class": ["WsMG1c", "nnK0zc"]}).parent.attrs["href"].split("id=")[-1]
+            corporation = app.find("div", attrs={"class": ["KoLSrc"]}).text
 
-        android_app_obj = AndroidApp.get_by_key_name(pkg)
-        if not android_app_obj:
-            android_app_obj = AndroidApp(key_name=pkg)
-        android_app_obj.image_url = image
-        android_app_obj.name = name
-        android_app_obj.corporation = corporation
-        android_app_obj.pkg = pkg
-        android_app_obj.category = category
-        android_app_obj.updated_on = datetime.datetime.now()
-        android_app_obj.disabled = False
-        android_app_obj.put()
+            android_app_obj = AndroidApp.get_by_key_name(pkg)
+            if not android_app_obj:
+                android_app_obj = AndroidApp(key_name=pkg)
+            android_app_obj.image_url = image
+            android_app_obj.name = name
+            android_app_obj.corporation = corporation
+            android_app_obj.pkg = pkg
+            android_app_obj.category = category
+            android_app_obj.updated_on = datetime.datetime.now()
+            android_app_obj.disabled = False
+            android_app_obj.put()
+        except Exception as e:
+            logging.exception("Failed to Scrape app data to database. Content: " + str(app))
 
 
 def map_image_urls(button):
@@ -67,44 +71,54 @@ def get_app_detail_json_formatted_data(data):
 
 
 def get_app_details(request, *args, **kwargs):
-    id = dict(request.str_params).get("id")
-    response_data = memcache.get("details_" + id)
-    if not response_data:
-        response = urlfetch.fetch("https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id))
-        try:
-            soup = BeautifulSoup(response.content, "html.parser")
-            response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
-            response_data = get_app_detail_json_formatted_data(response_data)
-        except Exception as e:
-            response_data = {"error": "Unable to get details for package "+ str(id)}
-        memcache.set("details_" + id, response_data, 21600)
-    request.response.out.write(json.dumps({"data": response_data}))
     request.response.headers.add('Access-Control-Allow-Origin', '*')
+    id = dict(request.str_params).get("id")
+    if not id:
+        return request.response.out.write(json.dumps({"error": "id is required"}))
+    response_data = memcache.get("details_" + id)
+    website = "https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/details?id="+str(id)
+    try:
+        if not response_data:
+            response = urlfetch.fetch(website)
+            try:
+                soup = BeautifulSoup(response.content, "html.parser")
+                response_data = soup.find("c-wiz", attrs={"class": ["zQTmif", "SSPGKf", "I3xX3c", "drrice"]})
+                response_data = get_app_detail_json_formatted_data(response_data)
+            except Exception as e:
+                response_data = {"error": "Unable to get details for package "+ str(id)}
+            memcache.set("details_" + id, response_data, 21600)
+        request.response.out.write(json.dumps({"data": response_data}))
+    except Exception as e:
+        logging.exception("Unable to scrape data from " + website + ".Please try again later")
 
-
-def save_new_apps(request):  # put application's code here
+def save_new_apps(request):
     # https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/top
     # https://web.archive.org/web/20220409232016/https://play.google.com/store/apps/top
     # https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top
-    response = urlfetch.fetch("https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top")
-    soup = BeautifulSoup(response.content, "html.parser")
-    top_free_apps, top_paid_apps, top_grossing_apps, top_free_games, top_paid_games, top_grossing_games = list(soup.findAll("div", attrs={"class": ['ZmHEEd', 'fLyRuc']}))
-    all_apps = db.GqlQuery("SELECT * "
-                           "FROM AndroidApp "
-                           "WHERE disabled = FALSE ")
-    for app in all_apps:
-        app.disabled = True
-        app.put()
-    add_apps_to_db(top_free_apps.children, "top_free_apps")
-    add_apps_to_db(top_paid_apps.children, "top_paid_apps")
-    add_apps_to_db(top_grossing_apps.children, "top_grossing_apps")
-    add_apps_to_db(top_free_games.children, "top_free_games")
-    add_apps_to_db(top_paid_games.children, "top_paid_games")
-    add_apps_to_db(top_grossing_games.children, "top_grossing_games")
-    request.response.out.write(json.dumps({"success": True}))
-    request.response.headers.add('Access-Control-Allow-Origin', '*')
-    # reset memcache
-    memcache.delete("latest_60_apps")
+    website = "https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top"
+    try:
+        response = urlfetch.fetch(website)
+        soup = BeautifulSoup(response.content, "html.parser")
+        top_free_apps, top_paid_apps, top_grossing_apps, top_free_games, top_paid_games, top_grossing_games = list(soup.findAll("div", attrs={"class": ['ZmHEEd', 'fLyRuc']}))
+        all_apps = db.GqlQuery("SELECT * "
+                               "FROM AndroidApp "
+                               "WHERE disabled = FALSE ")
+        for app in all_apps:
+            app.disabled = True
+            app.put()
+        add_apps_to_db(top_free_apps.children, "top_free_apps")
+        add_apps_to_db(top_paid_apps.children, "top_paid_apps")
+        add_apps_to_db(top_grossing_apps.children, "top_grossing_apps")
+        add_apps_to_db(top_free_games.children, "top_free_games")
+        add_apps_to_db(top_paid_games.children, "top_paid_games")
+        add_apps_to_db(top_grossing_games.children, "top_grossing_games")
+        request.response.out.write(json.dumps({"success": True}))
+        request.response.headers.add('Access-Control-Allow-Origin', '*')
+        # reset memcache
+        memcache.delete("latest_60_apps")
+    except Exception as e:
+        logging.exception("Unable to scrape data from " + website + ".Please try again later")
+        request.response.out.write(json.dumps({"success": False}))
 
 
 def get_all_apps(request):
