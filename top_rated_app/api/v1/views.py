@@ -95,7 +95,7 @@ def save_new_apps(request):
     # https://web.archive.org/web/20220408090905/https://play.google.com/store/apps/top
     # https://web.archive.org/web/20220409232016/https://play.google.com/store/apps/top
     # https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top
-    website = "https://web.archive.org/web/20220413103059/https://play.google.com/store/apps/top"
+    website = "https://web.archive.org/web/20220409232016/https://play.google.com/store/apps/top"
     try:
         response = urlfetch.fetch(website)
         soup = BeautifulSoup(response.content, "html.parser")
@@ -123,6 +123,7 @@ def save_new_apps(request):
 
 def get_all_apps(request):
     response_data = memcache.get("latest_60_apps")
+        logging.debug("Apps found in get_all_apps ")
     if not response_data:
         all_apps = db.GqlQuery("SELECT * "
                                 "FROM AndroidApp "
